@@ -1,132 +1,120 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8" />
-<title>EEW 地震速報觀測</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<style>
-body {
-  margin: 0;
-  padding: 16px;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: linear-gradient(180deg, #0b1220, #020617);
-  color: #e5e7eb;
-}
-h1 { margin-bottom: 8px; }
-.status { margin-bottom: 12px; }
-.card {
-  background: rgba(2,6,23,.9);
-  border-radius: 16px;
-  padding: 16px;
-}
-.row {
-  display: flex;
-  justify-content: space-between;
-  margin: 6px 0;
-}
-.alert {
-  background: #7f1d1d;
-  border: 1px solid #ef4444;
-}
-.ok { color: #22c55e; }
-.err { color: #ef4444; }
-</style>
+  <meta charset="UTF-8" />
+  <title>EEW 地震速報觀測</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui;
+      background: linear-gradient(180deg, #0b1220, #020617);
+      color: #fff;
+    }
+    .container {
+      max-width: 420px;
+      margin: 30px auto;
+      padding: 20px;
+    }
+    h1 { font-size: 22px; }
+    .status { color: #22c55e; margin: 10px 0 20px; }
+    .card {
+      background: rgba(255,255,255,0.06);
+      border-radius: 16px;
+      padding: 20px;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      margin: 8px 0;
+    }
+    button {
+      width: 100%;
+      margin-top: 15px;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      background: #2563eb;
+      color: #fff;
+      font-size: 16px;
+    }
+  </style>
 </head>
+
 <body>
+<div class="container">
+  <h1>📡 EEW 地震速報觀測</h1>
+  <div class="status" id="status">● 連線中...</div>
 
-<h1>📡 EEW 地震速報觀測</h1>
-<div id="status" class="status">初始化中…</div>
+  <div class="card">
+    <div class="row"><span>震央</span><span id="loc">--</span></div>
+    <div class="row"><span>規模</span><span id="mag">--</span></div>
+    <div class="row"><span>深度</span><span id="depth">-- km</span></div>
+    <div class="row"><span>最大震度</span><span id="intensity">--</span></div>
+    <div class="row"><span>發生時間</span><span id="time">--</span></div>
+  </div>
 
-<div id="card" class="card">
-  <div class="row"><span>震央</span><span id="loc">--</span></div>
-  <div class="row"><span>規模</span><span id="mag">--</span></div>
-  <div class="row"><span>深度</span><span id="dep">-- km</span></div>
-  <div class="row"><span>最大震度</span><span id="lvl">--</span></div>
-  <div class="row"><span>剩餘時間</span><span id="sec">-- 秒</span></div>
-  <div class="row"><span>發生時間</span><span id="time">--</span></div>
+  <button onclick="enableNotification()">🔔 啟用地震通知</button>
 </div>
 
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
+
 <script>
-let apiUrl = "";
+/* ================= Firebase ================= */
 
-// 產生 Token（HTTPS 一定可用）
-async function generateToken() {
-  const ts = Math.floor(Date.now() / 1000);
-  const key = "Copyrights-2024-2025,-Chang-Yu-Hsi.-All-rights-reserved.";
-  const enc = new TextEncoder();
+const firebaseConfig = {
+  apiKey: "AIzaSyBV5TFoIf8qbtityDLYgY4qaBBKsFfBKvg",
+  authDomain: "eew6409-b5489.firebaseapp.com",
+  projectId: "eew6409-b5489",
+  messagingSenderId: "53785154936",
+  appId: "1:53785154936:web:6520b2504804f2fed5a48d"
+};
 
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw", enc.encode(key),
-    { name: "HMAC", hash: "SHA-256" },
-    false, ["sign"]
-  );
+firebase.initializeApp(firebaseConfig);
+const messaging = firebase.messaging();
 
-  const sig = await crypto.subtle.sign(
-    "HMAC", cryptoKey, enc.encode(ts.toString())
-  );
-
-  const sign = [...new Uint8Array(sig)]
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
-
-  return { ts, sign };
+async function enableNotification() {
+  const token = await messaging.getToken({
+    vapidKey: "eQX8Sqqx4VTFg0_hNp4qT_PKdyN2iipx8VLKIJA6oSo"
+  });
+  console.log("FCM Token:", token);
+  alert("通知已啟用 ✅");
 }
 
-// 初始化（顯示上一個地震）
-async function initEEW() {
-  try {
-    const res = await fetch(
-      "https://twearthquake.zapto.org:30007/api/web/initialization"
-    );
-    const data = await res.json();
-    apiUrl = data.url;
+/* ================= EEW API ================= */
 
-    document.getElementById("loc").innerText = data.address || "近期無地震";
-    document.getElementById("mag").innerText = data.scale ?? "--";
-    document.getElementById("dep").innerText = (data.depth ?? "--") + " km";
-    document.getElementById("lvl").innerText = data.maxlevel ?? "--";
-    document.getElementById("sec").innerText = "-- 秒";
-    document.getElementById("time").innerText = data.time || "--";
+/**
+ * ⚠️ 改成你的 EEW / 上一個地震 API
+ * 例：
+ * https://eew-3j0v.onrender.com/last
+ */
+const EEW_API_URL = "https://eew-3j0v.onrender.com/last";
+
+async function fetchLastEarthquake() {
+  try {
+    const res = await fetch(EEW_API_URL);
+    const data = await res.json();
+
+    // 依你後端格式調整
+    document.getElementById("loc").innerText = data.location;
+    document.getElementById("mag").innerText = data.magnitude;
+    document.getElementById("depth").innerText = data.depth + " km";
+    document.getElementById("intensity").innerText = data.intensity + " 級";
+    document.getElementById("time").innerText = data.time;
 
     document.getElementById("status").innerText = "● 已連線（上一個地震）";
-    document.getElementById("status").className = "status ok";
   } catch (e) {
-    document.getElementById("status").innerText =
-      "初始化失敗：" + e.message;
-    document.getElementById("status").className = "status err";
+    document.getElementById("status").innerText = "● 連線失敗";
+    console.error(e);
   }
 }
 
-// 輪詢 EEW
-async function pollEEW() {
-  if (!apiUrl) return;
-  try {
-    const { ts, sign } = await generateToken();
-    const res = await fetch(apiUrl + "/Taipei0", {
-      headers: {
-        "TWEarthquake-Timestamp": ts,
-        "TWEarthquake-Token-Sign": sign
-      }
-    });
-    const data = await res.json();
-
-    if (data.HasEarthquake) {
-      const eq = data.Earthquake;
-      document.getElementById("loc").innerText = eq.address;
-      document.getElementById("mag").innerText = eq.scale;
-      document.getElementById("dep").innerText = eq.depth + " km";
-      document.getElementById("lvl").innerText = eq.level;
-      document.getElementById("sec").innerText = eq.second + " 秒";
-      document.getElementById("time").innerText = eq.time;
-      document.getElementById("card").classList.add("alert");
-      document.getElementById("status").innerText = "⚠ 地震速報生效中";
-    }
-  } catch {}
-}
-
-initEEW();
-setInterval(pollEEW, 1500);
+// 每 10 秒更新一次
+fetchLastEarthquake();
+setInterval(fetchLastEarthquake, 10000);
 </script>
-
 </body>
-                                      </html>
+</html>
