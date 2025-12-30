@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8" />
+<title>EEW 地震速報觀測</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+body {
+  margin: 0;
+  padding: 16px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(180deg, #0b1220, #020617);
+  color: #e5e7eb;
+}
+h1 { margin-bottom: 8px; }
+.status { margin-bottom: 12px; }
+.card {
+  background: rgba(2,6,23,.9);
+  border-radius: 16px;
+  padding: 16px;
+}
+.row {
+  display: flex;
+  justify-content: space-between;
+  margin: 6px 0;
+}
+.alert {
+  background: #7f1d1d;
+  border: 1px solid #ef4444;
+}
+.ok { color: #22c55e; }
+.err { color: #ef4444; }
+</style>
+</head>
+<body>
+
+<h1>📡 EEW 地震速報觀測</h1>
+<div id="status" class="status">初始化中…</div>
+
+<div id="card" class="card">
+  <div class="row"><span>震央</span><span id="loc">--</span></div>
+  <div class="row"><span>規模</span><span id="mag">--</span></div>
+  <div class="row"><span>深度</span><span id="dep">-- km</span></div>
+  <div class="row"><span>最大震度</span><span id="lvl">--</span></div>
+  <div class="row"><span>剩餘時間</span><span id="sec">-- 秒</span></div>
+  <div class="row"><span>發生時間</span><span id="time">--</span></div>
+</div>
+
+<script>
+let apiUrl = "";
+
+// 產生 Token（HTTPS 一定可用）
+async function generateToken() {
+  const ts = Math.floor(Date.now() / 1000);
+  const key = "Copyrights-2024-2025,-Chang-Yu-Hsi.-All-rights-reserved.";
+  const enc = new TextEncoder();
+
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw", enc.encode(key),
+    { name: "HMAC", hash: "SHA-256" },
+    false, ["sign"]
+  );
+
+  const sig = await crypto.subtle.sign(
+    "HMAC", cryptoKey, enc.encode(ts.toString())
+  );
+
+  const sign = [...new Uint8Array(sig)]
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  return { ts, sign };
+}
+
+// 初始化（顯示上一個地震）
+async function initEEW() {
+  try {
+    const res = await fetch(
+      "https://twearthquake.zapto.org:30007/api/web/initialization"
+    );
+    const data = await res.json();
+    apiUrl = data.url;
+
+    document.getElementById("loc").innerText = data.address || "近期無地震";
+    document.getElementById("mag").innerText = data.scale ?? "--";
+    document.getElementById("dep").innerText = (data.depth ?? "--") + " km";
+    document.getElementById("lvl").innerText = data.maxlevel ?? "--";
+    document.getElementById("sec").innerText = "-- 秒";
+    document.getElementById("time").innerText = data.time || "--";
+
+    document.getElementById("status").innerText = "● 已連線（上一個地震）";
+    document.getElementById("status").className = "status ok";
+  } catch (e) {
+    document.getElementById("status").innerText =
+      "初始化失敗：" + e.message;
+    document.getElementById("status").className = "status err";
+  }
+}
+
+// 輪詢 EEW
+async function pollEEW() {
+  if (!apiUrl) return;
+  try {
+    const { ts, sign } = await generateToken();
+    const res = await fetch(apiUrl + "/Taipei0", {
+      headers: {
+        "TWEarthquake-Timestamp": ts,
+        "TWEarthquake-Token-Sign": sign
+      }
+    });
+    const data = await res.json();
+
+    if (data.HasEarthquake) {
+      const eq = data.Earthquake;
+      document.getElementById("loc").innerText = eq.address;
+      document.getElementById("mag").innerText = eq.scale;
+      document.getElementById("dep").innerText = eq.depth + " km";
+      document.getElementById("lvl").innerText = eq.level;
+      document.getElementById("sec").innerText = eq.second + " 秒";
+      document.getElementById("time").innerText = eq.time;
+      document.getElementById("card").classList.add("alert");
+      document.getElementById("status").innerText = "⚠ 地震速報生效中";
+    }
+  } catch {}
+}
+
+initEEW();
+setInterval(pollEEW, 1500);
+</script>
+
+</body>
+                                      </html>
